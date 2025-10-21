@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MCP Tester</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 2rem; max-width: 900px; }
+    label { display:block; margin:.5rem 0 .25rem; font-weight:600; }
+    input, textarea, select { width:100%; box-sizing:border-box; }
+    textarea { min-height: 180px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    pre { background:#0b1020; color:#d6e7ff; padding:1rem; border-radius:8px; overflow:auto; }
+    .row { display:flex; gap:1rem; align-items:flex-end; }
+    .row > * { flex:1; }
+    button { padding:.7rem 1.2rem; font-weight:700; }
+    small { color:#666; }
+  </style>
+</head>
+<body>
+  <h1>MCP Tester</h1>
+
+  <label for="url">Endpoint URL</label>
+  <input id="url" value="https://steph-learning-mcp-bthcbhb0evb0gwby.eastus-01.azurewebsites.net/mcp" />
+
+  <div class="row">
+    <div>
+      <label for="tool">Tool</label>
+      <select id="tool">
+        <option value="complete_prompt" selected>complete_prompt</option>
+        <option value="say_hello">say_hello</option>
+      </select>
+      <small>Use “Tools → List” to refresh from server.</small>
+    </div>
+    <div style="flex:0 0 auto">
+      <button id="btn-list">Tools → List</button>
+    </div>
+  </div>
+
+  <div id="args-complete-prompt">
+    <label for="prompt">Prompt</label>
+    <input id="prompt" value="Give me a fun fact about outer space." />
+  </div>
+
+  <div id="args-say-hello" style="display:none">
+    <label for="name">Name</label>
+    <input id="name" value="Alice" />
+  </div>
+
+  <div class="row" style="margin-top:1rem">
+    <button id="send">Send tool_invoke</button>
+    <span id="status"></span>
+  </div>
+
+  <h2>Request (auto-built)</h2>
+  <pre id="req">(will be generated)</pre>
+
+  <h2>Response</h2>
+  <pre id="res">(none yet)</pre>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function buildRequest() {
+      const tool = $('tool').value;
+      let args = {};
+      if (tool === 'complete_prompt') {
+        args = { prompt: $('prompt').value };
+      } else if (tool === 'say_hello') {
+        args = { name: $('name').value };
+      }
+      return {
+        jsonrpc: "2.0",
+        method: "tool_invoke",
+        params: { tool, args },
+        id: String(Date.now())
+      };
+    }
+
+    function switchArgs() {
+      const tool = $('tool').value;
+      $('args-complete-prompt').style.display = (tool === 'complete_prompt') ? '' : 'none';
+      $('args-say-hello').style.display = (tool === 'say_hello') ? '' : 'none';
+      $('req').textContent = JSON.stringify(buildRequest(), null, 2);
+    }
+
+    $('tool').addEventListener('change', switchArgs);
+    switchArgs();
+
+    $('send').addEventListener('click', async () => {
+      $('status').textContent = 'Sending…';
+      $('res').textContent = '';
+      const body = buildRequest();
+      $('req').textContent = JSON.stringify(body, null, 2);
+      try {
+        const r = await fetch($('url').value, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const text = await r.text();
+        $('status').textContent = `HTTP ${r.status}`;
+        try { $('res').textContent = JSON.stringify(JSON.parse(text), null, 2); }
+        catch { $('res').textContent = text; }
+      } catch (e) {
+        $('status').textContent = 'Network error';
+        $('res').textContent = e.message;
+      }
+    });
+
+    $('btn-list').addEventListener('click', async () => {
+      $('status').textContent = 'Fetching tools…';
+      $('res').textContent = '';
+      const body = { jsonrpc: "2.0", method: "tools/list", id: "list-" + Date.now() };
+      $('req').textContent = JSON.stringify(body, null, 2);
+      try {
+        const r = await fetch($('url').value, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await r.json();
+        $('status').textContent = `HTTP ${r.status}`;
+        $('res').textContent = JSON.stringify(data, null, 2);
+        // If server returns tools, repopulate dropdown
+        if (data.result && Array.isArray(data.result.tools)) {
+          const sel = $('tool');
+          const current = sel.value;
+          sel.innerHTML = '';
+          for (const t of data.result.tools) {
+            const opt = document.createElement('option');
+            opt.value = t.name; opt.textContent = t.name;
+            sel.appendChild(opt);
+          }
+          // prefer complete_prompt if present
+          const prefer = data.result.tools.find(t => t.name === 'complete_prompt');
+          sel.value = prefer ? 'complete_prompt' : (data.result.tools[0]?.name || current);
+          switchArgs();
+        }
+      } catch (e) {
+        $('status').textContent = 'Network error';
+        $('res').textContent = e.message;
+      }
+    });
+  </script>
+</body>
+</html>

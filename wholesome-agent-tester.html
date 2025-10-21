@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wholesome Facts</title>
+<style>
+  :root{
+    --pink:#ffa9c3;
+    --pink-dark:#f592b1;
+    --white:#fff;
+    --text:#ffeff4;
+    --ink:#9c3c5b;
+  }
+  body{background:#ffe4ee;font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}
+  .card{
+    width:min(860px,92vw);
+    background:var(--pink);
+    color:var(--text);
+    padding:40px 48px 32px;
+    border-radius:48px;
+    box-shadow:0 10px 30px rgba(255,80,140,.25);
+  }
+  h1{margin:0 0 14px;font-size:40px;letter-spacing:.5px;text-align:center}
+  p.lead{margin:0 0 18px;text-align:center;line-height:1.35}
+  label{display:block;margin:14px 0 6px;font-weight:700}
+  input[type=text]{width:100%;padding:10px 12px;border:2px solid var(--pink-dark);border-radius:4px;background:#ffd3e0;color:#6b1f39;outline:none}
+  input[type=text]::placeholder{color:#b55e79}
+  .btn{width:100%;padding:10px 12px;font-weight:800;text-transform:capitalize;
+       border:2px solid var(--pink-dark);background:#ffc1d4;color:#6b1f39;border-radius:4px;cursor:pointer}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .panel{margin:18px 0 10px;background:#ffd3e0;border-radius:6px;min-height:240px;padding:14px;border:2px solid var(--pink-dark);color:#6b1f39;}
+  .facts{list-style:disc;padding-left:22px;margin:4px 0 0}
+  .row{display:flex;gap:14px;margin-top:10px}
+  .row .btn{flex:1}
+  .small{font-size:.9rem;color:#6b1f39;opacity:.9;text-align:center;margin-top:8px}
+  .endpoint{margin-top:14px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Wholesome Facts to Brighten Your Day</h1>
+    <p class="lead">In the box below, enter a subject or leave it blank to receive 3 random wholesome facts.</p>
+
+    <label for="subject">Subject (optional)</label>
+    <input id="subject" type="text" placeholder="e.g., dogs, space, gardening" />
+
+    <div class="row">
+      <button id="submit" class="btn">Submit</button>
+      <button id="clear" class="btn">Clear</button>
+    </div>
+
+    <div id="panel" class="panel">
+      <ul id="facts" class="facts"></ul>
+    </div>
+
+    <div class="endpoint">
+      <label for="url" style="margin-top:0">Endpoint URL</label>
+      <input id="url" type="text" value="https://steph-learning-mcp-bthcbhb0evb0gwby.eastus-01.azurewebsites.net/mcp" />
+      <div class="small">Uses the <strong>wholesome_facts</strong> tool via JSON-RPC.</div>
+    </div>
+  </div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function renderFacts(list){
+  const ul = $('facts');
+  ul.innerHTML = '';
+  list.forEach(f => {
+    const li = document.createElement('li');
+    li.textContent = f;
+    ul.appendChild(li);
+  });
+}
+
+async function fetchFacts(subject){
+  const body = {
+    jsonrpc: "2.0",
+    method: "tool_invoke",
+    id: String(Date.now()),
+    params: {
+      tool: "wholesome_agent",
+      args: subject ? { subject } : {}
+    }
+  };
+
+  const res = await fetch($('url').value, {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if(!res.ok){
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  if(data.error) throw new Error(data.error.message || 'Tool error');
+  return data.result?.facts || [];
+}
+
+$('submit').addEventListener('click', async () => {
+  const btn = $('submit');
+  btn.disabled = true; btn.textContent = 'Working…';
+  $('facts').innerHTML = '';
+  try{
+    const facts = await fetchFacts(($('subject').value || '').trim());
+    renderFacts(facts);
+  }catch(err){
+    renderFacts([`Oops: ${err.message}. Check endpoint and tool deployment.`]);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Submit';
+  }
+});
+
+$('clear').addEventListener('click', () => {
+  $('subject').value = '';
+  $('facts').innerHTML = '';
+});
+</script>
+</body>
+</html>
